@@ -1,0 +1,52 @@
+#Install cutadatp w/ python3; run only once if you don't have
+#cutadapt installed previosly.
+
+python3 -m pip install --user --upgrade cutadapt
+
+###################Remove all files with seq extension through terminal
+
+cd /Volumes/SeagatePortableDrive-JG/Quintara/JG33-sgRNA-QB5609
+
+#list all the files in the directory with the extension
+find . -name "*.seq" -type f
+
+#delete all the files in the directory with the extension
+find . -name "*.seq" -type f -delete
+
+
+#Trim sequences + filter out anything longer/shorter than 20bp:
+/Users/jana/Library/Python/3.8/bin/cutadapt -a cgaaacaccg...GTTTAAGAGC --discard-untrimmed -m=20 -M=20 -o trimmed-seqs.fas all_text.fas
+
+#Check the number of sequences that passed the filter
+grep -c "^>" trimmed-seqs.fas
+
+###################Manipulate data in R
+library(Biostrings)
+library(tidyverse)
+
+setwd("/Volumes/SeagatePortableDrive-JG/Quintara/JG33-sgRNA-QB5609")
+guides <- read.table("trimmed-seqs.fas")
+#read every other row to extract the sequences and the name of the clones
+guides.seq <- data.frame(guides[seq(2, nrow(guides), 2), ])
+guides.nms <- data.frame(guides[seq(1, nrow(guides), 2), ])
+
+#remove the prefix and suffix of the clone name
+colnames(guides.nms) <- c("Guide Coordinates")
+guides.nms <- guides.nms$`Guide Coordinates` %>% str_replace_all(c(">JG33-sgRNA-" = "Clone ", "_QB5609" = " " ))
+
+guides.new <- cbind(guides.nms, guides.seq)
+colnames(guides.new) <- c("sequencing name", "guide")
+
+#load reference file
+guides_ref <- read.csv("JG-pooledsgRNA.csv", header=TRUE)
+colnames(guides_ref) <- c("oligo name", "function", "guide")
+#change all the sequences to be uppercase
+guides_ref$guide <- toupper(guides_ref$guide)
+
+#find the guides that are present and the ones that are not in the sequence clones
+guides_present <- merge(guides_ref, guides.new, by="guide") #present
+extra_guides <- anti_join(guides_ref, guides.new, by="guide") #absent
+
+#export the dataframes as csv files
+write.csv(guides_present,"/Volumes/SeagatePortableDrive-JG/Quintara/JG33-sgRNA-QB5609/guides_present.csv", row.names = FALSE)
+write.csv(extra_guides,"/Volumes/SeagatePortableDrive-JG/Quintara/JG33-sgRNA-QB5609/guides_NOTpresent.csv", row.names = FALSE)
